@@ -16,33 +16,40 @@ if p.exists():
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import app.server as server
-
-# Patch DB/Redis create/close to no-ops to avoid external dependencies
-async def noop(*a, **k):
-    return None
-
-import app.store.database as db
-import app.store.redis_store as rds
-
-db.create_pool = noop
-db.close_pool = noop
-rds.create_redis = noop
-rds.close_redis = noop
-
-# Prepare TestClient and override repo/dependency functions where needed
 from fastapi.testclient import TestClient
 
 
+def _patch_db_redis_noop():
+    # Patch DB/Redis create/close to no-ops to avoid external dependencies
+    async def noop(*a, **k):
+        return None
+
+    import app.store.database as db
+    import app.store.redis_store as rds
+
+    db.create_pool = noop
+    db.close_pool = noop
+    rds.create_redis = noop
+    rds.close_redis = noop
+
+
 def test_health_endpoint():
+    import app.server as server
+
+    _patch_db_redis_noop()
+
     app = server.create_app()
     with TestClient(app) as client:
         r = client.get('/health')
         assert r.status_code == 200
-        assert r.json() == {'status':'ok'}
+        assert r.json() == {'status': 'ok'}
 
 
 def test_register_and_login_endpoints():
+    # Ensure DB/Redis no-op patches are applied
+    _patch_db_redis_noop()
+
+    import app.server as server
     # Patch repository functions used by auth routes
     import app.api.auth as auth_mod
     import app.api.dependencies as deps_mod
@@ -68,12 +75,12 @@ def test_register_and_login_endpoints():
     app = server.create_app()
     with TestClient(app) as client:
         # Register
-        r = client.post('/v1/auth/register', json={'username':'alice','passphrase':'supersecret','ack_code':'ACK1'})
+        r = client.post('/v1/auth/register', json={'username': 'alice', 'passphrase': 'supersecret', 'ack_code': 'ACK1'})
         assert r.status_code == 201
         body = r.json()
         assert 'user_id' in body and body['username'] == 'alice'
 
         # Login
-        r2 = client.post('/v1/auth/login', json={'username':'alice','passphrase':'supersecret'})
+        r2 = client.post('/v1/auth/login', json={'username': 'alice', 'passphrase': 'supersecret'})
         assert r2.status_code == 200
         assert r2.json().get('access_token') == 'token-stub'
