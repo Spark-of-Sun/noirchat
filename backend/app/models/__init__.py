@@ -1,0 +1,1 @@
+"""app.models — domain data classes"""

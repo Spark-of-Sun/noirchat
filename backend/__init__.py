@@ -1,0 +1,1 @@
+"""app — Noirchat FastAPI application"""
